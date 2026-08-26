@@ -5,6 +5,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
 import colorama
+import tldextract
 from colorama import Fore, Style
 
 
@@ -30,6 +31,8 @@ CYAN = Fore.CYAN
 LIGHT_CYAN = Fore.LIGHTCYAN_EX
 MAGENTA = Fore.MAGENTA
 LIGHT_MAGENTA = Fore.LIGHTMAGENTA_EX
+WHITE = Fore.WHITE
+LIGHT_WHITE = Fore.LIGHTWHITE_EX
 
 RESET = Style.RESET_ALL
 BOLD = Style.BRIGHT
@@ -41,69 +44,12 @@ BOLD = Style.BRIGHT
 
 DEFAULT_BATCH_SIZE = 5000
 
-EMAIL_PATTERN = re.compile(
-    r"\b[A-Za-z0-9._%+\-]+@"
-    r"[A-Za-z0-9\-]+"
-    r"(?:\.[A-Za-z0-9\-]+)*"
-    r"\.[A-Za-z]{2,}\b",
-    re.IGNORECASE
-)
-
 
 # ==========================================================
-# PROVIDER FAMILIES
-# ==========================================================
-
-HOTMAIL_FAMILY = {
-    "hotmail",
-    "live",
-    "outlook",
-    "msn",
-}
-
-YAHOO_FAMILY = {
-    "yahoo",
-    "btinternet",
-    "ymail",
-    "rocketmail",
-}
-
-AOL_FAMILY = {
-    "aol",
-}
-
-
-# ==========================================================
-# EXCLUDED PROVIDERS
-# These will NOT be written to any output file.
-# ==========================================================
-
-EXCLUDED_PROVIDERS = {
-    "zoho",
-    "mail",
-    "gmx",
-    "comcast",
-    "juno",
-    "netzero",
-    "t-online",
-    "proton",
-    "icloud",
-    "me",
-    "mac",
-    "yandex",
-    "mail.ru",
-    "web.de",
-    "qq",
-    "163",
-    "126",
-    "fastmail",
-    "hey",
-    "tutanota",
-}
-
-
-# ==========================================================
-# COUNTRY / TLD GROUPS
+# 30 POPULAR COUNTRY / DOMAIN GROUPS
+#
+# Every recognized public suffix is mapped to one of these
+# country groups. Anything not listed goes to Other_Country.
 # ==========================================================
 
 COUNTRY_SUFFIXES = {
@@ -142,7 +88,127 @@ COUNTRY_SUFFIXES = {
     "Canada": {
         "CA",
     },
+    
+	"Google": {
+	    "gmail.",
+	    "googlemail.",
+	},
 
+	"Hotmail": {
+	    "hotmail.",
+	    "live.",
+	    "outlook.",
+	    "msn.",
+	},
+
+	"Yahoo": {
+	    "yahoo.",
+	    "ymail.",
+	    "rocketmail.",
+	    "ymail.",
+	},
+
+	"T-online": {
+	    "t-online.",
+	},
+
+	"Apple": {
+	    "icloud.",
+	    "me.",
+	    "mac.",
+	},
+
+	"Proton": {
+	    "protonmail.",
+	    "proton.",
+	},
+
+	"GMX": {
+	    "gmx.",
+	    "gmx.",
+	},
+
+	"Mail": {
+	    "mail.",
+	    "inbox.",
+	    "list.",
+	    "bk.",
+	},
+
+	"Zoho": {
+	    "zoho.",
+	},
+
+	"AOL": {
+	    "aol.",
+	},
+
+	"Comcast": {
+	    "comcast.",
+	},
+
+	"Verizon": {
+	    "verizon.",
+	},
+
+	"AT&T": {
+	    "att.",
+	    "sbcglobal.",
+	    "bellsouth.",
+	},
+
+	"BT": {
+	    "btinternet.",
+	    "btopenworld.",
+	},
+
+	"Orange": {
+	    "orange.",
+	},
+
+	"Free": {
+	    "free.",
+	},
+
+	"Web": {
+	    "web.",
+	},
+
+	"GMX": {
+	    "gmx.",
+	},
+
+	"Yandex": {
+	    "yandex.",
+	    "ya.",
+	},
+
+	"Rambler": {
+	    "rambler.",
+	},
+
+	"QQ": {
+	    "qq.",
+	    "foxmail.",
+	},
+
+	"163": {
+	    "163.",
+	    "126.",
+	    "yeah.",
+	},
+
+	"Mail": {
+	    "mail.",
+	},
+
+	"Fastmail": {
+	    "fastmail.",
+	},
+
+	"Seznam": {
+	    "seznam.",
+	},
     "Germany": {
         "DE",
     },
@@ -301,148 +367,140 @@ COUNTRY_SUFFIXES = {
 
 
 # ==========================================================
-# BUILD SUFFIX LOOKUP
+# BUILD FAST SUFFIX -> COUNTRY LOOKUP
 # ==========================================================
 
 SUFFIX_TO_COUNTRY = {}
 
-for country, suffixes in COUNTRY_SUFFIXES.items():
-
+for country_name, suffixes in COUNTRY_SUFFIXES.items():
     for suffix in suffixes:
-        SUFFIX_TO_COUNTRY[suffix.upper()] = country
+        SUFFIX_TO_COUNTRY[suffix.upper()] = country_name
 
 
 # ==========================================================
-# COUNTRY DETECTION
+# COLORED OUTPUT
 # ==========================================================
 
-def get_country(email):
+def info(message):
+    print(f"{LIGHT_CYAN}{BOLD}[INFO]{RESET} {message}")
+
+
+def success(message):
+    print(f"{LIGHT_GREEN}{BOLD}[SUCCESS]{RESET} {message}")
+
+
+def warning(message):
+    print(f"{LIGHT_YELLOW}{BOLD}[NOTICE]{RESET} {message}")
+
+
+def error(message):
+    print(f"{LIGHT_RED}{BOLD}[ERROR]{RESET} {message}")
+
+
+def saved(message):
+    print(f"{LIGHT_MAGENTA}{BOLD}[SAVED]{RESET} {message}")
+
+
+def found(message):
+    print(f"{GREEN}{BOLD}[FOUND]{RESET} {message}")
+
+
+# ==========================================================
+# LOGO
+# ==========================================================
+
+def logo():
+
+    print(f"""
+{LIGHT_CYAN}{BOLD}
+       ___
+     o|* *|o  ╔╦═╦╗╔╦╗╔╦═╦╗
+     o|* *|o  ║║╔╣╚╝║║║║║║║
+     o|* *|o  ║║╚╣╔╗║╚╝║╩║║
+      \\===/   ║╚═╩╝╚╩══╩╩╝║
+       |||    ╚═══════════╝
+       |||  K.E.U.R - C.O.M.B.O.S
+
+{LIGHT_YELLOW}      By : AnnaQitty
+{RESET}
+""")
+
+
+# ==========================================================
+# TLD EXTRACTOR
+#
+# Uses bundled suffix data.
+# No online suffix download required.
+# ==========================================================
+
+extractor = tldextract.TLDExtract(
+    suffix_list_urls=None
+)
+
+
+# ==========================================================
+# EMAIL:PASSWORD PATTERN
+# ==========================================================
+
+COMBO_PATTERN = re.compile(
+    r'([A-Za-z0-9._%+\-]+@'
+    r'[A-Za-z0-9\-]+'
+    r'(?:\.[A-Za-z0-9\-]+)*'
+    r'\.[A-Za-z]{2,})'
+    r':([^\s:]+)'
+)
+
+
+# ==========================================================
+# GET PUBLIC SUFFIX
+#
+# Examples:
+#
+# test@gmail.com
+# -> COM
+#
+# test@example.co.uk
+# -> CO.UK
+#
+# test@example.com.au
+# -> COM.AU
+# ==========================================================
+
+def get_tld(email):
 
     try:
-        domain = email.rsplit("@", 1)[1].lower().strip()
-    except Exception:
-        return "Other_Country"
 
-    parts = domain.split(".")
+        domain = email.rsplit(
+            "@",
+            1
+        )[1].lower().strip()
 
-    if len(parts) < 2:
-        return "Other_Country"
+        extracted = extractor(domain)
 
-    # Check longest suffix first.
-    # Example:
-    # example.co.uk -> CO.UK
-    # example.com.au -> COM.AU
+        if not extracted.suffix:
+            return None
 
-    if len(parts) >= 3:
+        return extracted.suffix.upper()
 
-        last_two = (
-            parts[-2] + "." + parts[-1]
-        ).upper()
-
-        if last_two in SUFFIX_TO_COUNTRY:
-            return SUFFIX_TO_COUNTRY[last_two]
-
-    last_one = parts[-1].upper()
-
-    return SUFFIX_TO_COUNTRY.get(
-        last_one,
-        "Other_Country"
-    )
-
-
-# ==========================================================
-# PROVIDER DETECTION
-# ==========================================================
-
-def get_provider_category(email):
-
-    try:
-        domain = email.rsplit("@", 1)[1].lower().strip()
     except Exception:
         return None
 
-    domain = domain.removeprefix("www.")
-
-    # ------------------------------------------------------
-    # Check exact excluded domains first
-    # ------------------------------------------------------
-
-    if domain in EXCLUDED_PROVIDERS:
-        return "Excluded"
-
-    # ------------------------------------------------------
-    # Provider name
-    # ------------------------------------------------------
-
-    provider = domain.split(".", 1)[0]
-
-    # ------------------------------------------------------
-    # Excluded providers
-    # ------------------------------------------------------
-
-    if provider in EXCLUDED_PROVIDERS:
-        return "Excluded"
-
-    # ------------------------------------------------------
-    # Hotmail family
-    # ------------------------------------------------------
-
-    if provider in HOTMAIL_FAMILY:
-        return "Hotmail_Family"
-
-    # ------------------------------------------------------
-    # Yahoo family
-    # ------------------------------------------------------
-
-    if provider in YAHOO_FAMILY:
-        return "Yahoo_Family"
-
-    # ------------------------------------------------------
-    # AOL family
-    # ------------------------------------------------------
-
-    if provider in AOL_FAMILY:
-        return "AOL_Family"
-
-    return "Other"
-
 
 # ==========================================================
-# PROCESS ONE LINE
+# GET COUNTRY GROUP
+#
+# Unknown suffixes automatically go to Other_Country.
 # ==========================================================
 
-def process_line(line):
+def get_country_group(tld):
 
-    results = []
+    if not tld:
+        return "Other_Country"
 
-    for match in EMAIL_PATTERN.finditer(line):
-
-        email = match.group(0).strip().lower()
-
-        if not email:
-            continue
-
-        category = get_provider_category(email)
-
-        # Only requested families are exported.
-        if category not in {
-            "Hotmail_Family",
-            "Yahoo_Family",
-            "AOL_Family",
-        }:
-            continue
-
-        country = get_country(email)
-
-        results.append(
-            (
-                category,
-                country,
-                email
-            )
-        )
-
-    return results
+    return SUFFIX_TO_COUNTRY.get(
+        tld.upper(),
+        "Other_Country"
+    )
 
 
 # ==========================================================
@@ -459,78 +517,100 @@ def safe_filename(name):
 
 
 # ==========================================================
-# COLORED OUTPUT
+# PROCESS ONE LINE
 # ==========================================================
 
-def info(message):
+def process_line(line):
 
-    print(
-        f"{LIGHT_CYAN}{BOLD}[INFO]{RESET} "
-        f"{message}"
-    )
+    items = []
 
+    for match in COMBO_PATTERN.finditer(line):
 
-def success(message):
+        email = match.group(1).strip()
+        password = match.group(2).strip()
 
-    print(
-        f"{LIGHT_GREEN}{BOLD}[SUCCESS]{RESET} "
-        f"{message}"
-    )
+        if not email or not password:
+            continue
 
+        tld = get_tld(email)
 
-def warning(message):
+        if not tld:
+            continue
 
-    print(
-        f"{LIGHT_YELLOW}{BOLD}[NOTICE]{RESET} "
-        f"{message}"
-    )
+        country = get_country_group(tld)
 
+        combo = f"{email}:{password}"
 
-def error(message):
+        items.append(
+            (
+                country,
+                combo
+            )
+        )
 
-    print(
-        f"{LIGHT_RED}{BOLD}[ERROR]{RESET} "
-        f"{message}"
-    )
-
-
-def found(message):
-
-    print(
-        f"{GREEN}{BOLD}[FOUND]{RESET} "
-        f"{message}"
-    )
-
-
-def saved(message):
-
-    print(
-        f"{LIGHT_MAGENTA}{BOLD}[SAVED]{RESET} "
-        f"{message}"
-    )
+    return items
 
 
 # ==========================================================
-# LOGO
+# SAVE RESULT
+#
+# Results are saved immediately.
 # ==========================================================
 
-def logo():
+def save_result(
+    output_folder,
+    all_file,
+    country_files,
+    country,
+    combo
+):
 
-    print(
-        f"""
-{LIGHT_CYAN}{BOLD}
-       ___
-      o|* *|o  ╔╦═╦╗╔╦╗╔╦═╦╗
-      o|* *|o  ║║╔╣╚╝║║║║║║║
-      o|* *|o  ║║╚╣╔╗║╚╝║╩║║
-       \\===/   ║╚═╩╝╚╩══╩╩╝║
-        |||    ╚═══════════╝
-        |||  EMAIL FAMILY + COUNTRY
-{LIGHT_YELLOW}
-       EMAIL-ONLY CLASSIFIER
-{RESET}
-"""
-    )
+    try:
+
+        # Save to ALL_RESULTS
+        with open(
+            all_file,
+            "a",
+            encoding="utf-8",
+            buffering=1024 * 1024
+        ) as out:
+
+            out.write(combo + "\n")
+
+
+        # Create temporary country file path
+        if country not in country_files:
+
+            filename = (
+                safe_filename(country)
+                + ".tmp"
+            )
+
+            country_files[country] = os.path.join(
+                output_folder,
+                filename
+            )
+
+
+        # Save to country file
+        with open(
+            country_files[country],
+            "a",
+            encoding="utf-8",
+            buffering=1024 * 1024
+        ) as out:
+
+            out.write(combo + "\n")
+
+        return True
+
+    except Exception as e:
+
+        error(
+            f"Save error: {e}"
+        )
+
+        return False
 
 
 # ==========================================================
@@ -543,21 +623,22 @@ def main():
 
     print(
         f"{LIGHT_CYAN}"
-        f"{'=' * 70}"
+        f"{'=' * 65}"
         f"{RESET}"
     )
 
     print(
         f"{LIGHT_YELLOW}{BOLD}"
-        f"       EMAIL FAMILY + COUNTRY FILTER"
+        f"      LARGE FILE COUNTRY COMBO EXTRACTOR"
         f"{RESET}"
     )
 
     print(
         f"{LIGHT_CYAN}"
-        f"{'=' * 70}"
+        f"{'=' * 65}"
         f"{RESET}"
     )
+
 
     # ======================================================
     # INPUT FILE
@@ -571,9 +652,11 @@ def main():
         ).strip().strip('"')
 
         if not input_file:
+
             error(
                 "Input file cannot be empty."
             )
+
             continue
 
         input_file = os.path.abspath(
@@ -583,12 +666,15 @@ def main():
         if not os.path.isfile(
             input_file
         ):
+
             error(
                 "Input file not found."
             )
+
             continue
 
         break
+
 
     # ======================================================
     # OUTPUT FOLDER
@@ -602,16 +688,18 @@ def main():
         ).strip().strip('"')
 
         if not output_folder:
+
             error(
                 "Output folder cannot be empty."
             )
+
             continue
 
-        output_folder = os.path.abspath(
-            output_folder
-        )
-
         try:
+
+            output_folder = os.path.abspath(
+                output_folder
+            )
 
             os.makedirs(
                 output_folder,
@@ -626,8 +714,9 @@ def main():
                 f"Cannot create output folder: {e}"
             )
 
+
     # ======================================================
-    # THREADS
+    # THREAD COUNT
     # ======================================================
 
     while True:
@@ -657,6 +746,7 @@ def main():
                 "Please enter a valid number."
             )
 
+
     # ======================================================
     # BATCH SIZE
     # ======================================================
@@ -665,22 +755,20 @@ def main():
 
         try:
 
-            batch_input = input(
+            batch_size_input = input(
                 f"{LIGHT_GREEN}[!]{RESET} "
                 f"Batch Size "
                 f"[{DEFAULT_BATCH_SIZE}]: "
             ).strip()
 
-            if not batch_input:
+            if not batch_size_input:
 
-                batch_size = (
-                    DEFAULT_BATCH_SIZE
-                )
+                batch_size = DEFAULT_BATCH_SIZE
 
             else:
 
                 batch_size = int(
-                    batch_input
+                    batch_size_input
                 )
 
             if batch_size < 1:
@@ -699,8 +787,9 @@ def main():
                 "Please enter a valid number."
             )
 
+
     # ======================================================
-    # FILE INFORMATION
+    # FILE SIZE
     # ======================================================
 
     file_size = os.path.getsize(
@@ -711,16 +800,15 @@ def main():
         file_size / (1024 ** 3)
     )
 
+
     print()
 
     info(
-        f"Input File    : "
-        f"{input_file}"
+        f"Input File    : {input_file}"
     )
 
     info(
-        f"Output Folder : "
-        f"{output_folder}"
+        f"Output Folder : {output_folder}"
     )
 
     info(
@@ -729,13 +817,11 @@ def main():
     )
 
     info(
-        f"Threads       : "
-        f"{threads}"
+        f"Threads       : {threads}"
     )
 
     info(
-        f"Batch Size    : "
-        f"{batch_size}"
+        f"Batch Size    : {batch_size}"
     )
 
     info(
@@ -743,148 +829,58 @@ def main():
         f"{len(COUNTRY_SUFFIXES)} + Other_Country"
     )
 
-    info(
-        f"Excluded      : "
-        f"{len(EXCLUDED_PROVIDERS)} providers"
-    )
-
     print()
 
+
     # ======================================================
-    # TEMP FILES
+    # TEMP OUTPUT FILES
     # ======================================================
 
-    temp_files = {}
-
-    # Family files
-    family_names = [
-        "Hotmail_Family",
-        "Yahoo_Family",
-        "AOL_Family",
-    ]
-
-    for family in family_names:
-
-        temp_files[family] = os.path.join(
-            output_folder,
-            family + ".tmp"
-        )
-
-    # Country files
-    for country in COUNTRY_SUFFIXES:
-
-        temp_files[country] = os.path.join(
-            output_folder,
-            country + ".tmp"
-        )
-
-    temp_files["Other_Country"] = os.path.join(
+    all_temp_file = os.path.join(
         output_folder,
-        "Other_Country.tmp"
+        "ALL_RESULTS.tmp"
     )
 
-    # Remove old temporary files
-    for path in temp_files.values():
+
+    # Remove old temporary ALL file
+    if os.path.exists(
+        all_temp_file
+    ):
 
         try:
 
-            if os.path.exists(path):
-                os.remove(path)
+            os.remove(
+                all_temp_file
+            )
 
         except Exception as e:
 
             error(
-                f"Cannot remove temp file "
-                f"{path}: {e}"
+                f"Cannot remove old temp file: {e}"
             )
 
             return
 
-    # ======================================================
-    # COUNTERS
-    # ======================================================
 
-    family_counts = {
-        "Hotmail_Family": 0,
-        "Yahoo_Family": 0,
-        "AOL_Family": 0,
-    }
-
-    country_counts = {
-        country: 0
-        for country in COUNTRY_SUFFIXES
-    }
-
-    country_counts["Other_Country"] = 0
+    country_files = {}
 
     seen = set()
 
     total_processed = 0
     total_found = 0
 
+    results_count = {}
+
     lock = threading.Lock()
 
     start_time = time.time()
 
-    # ======================================================
-    # SAVE EMAIL
-    # ======================================================
-
-    def save_email(
-        family,
-        country,
-        email
-    ):
-
-        try:
-
-            # ----------------------------------------------
-            # Family file
-            # ----------------------------------------------
-
-            with open(
-                temp_files[family],
-                "a",
-                encoding="utf-8",
-                buffering=1024 * 1024
-            ) as out:
-
-                out.write(
-                    email + "\n"
-                )
-
-            # ----------------------------------------------
-            # Country file
-            # ----------------------------------------------
-
-            with open(
-                temp_files[country],
-                "a",
-                encoding="utf-8",
-                buffering=1024 * 1024
-            ) as out:
-
-                out.write(
-                    email + "\n"
-                )
-
-            return True
-
-        except Exception as e:
-
-            error(
-                f"Save error: {e}"
-            )
-
-            return False
 
     # ======================================================
     # HANDLE COMPLETED FUTURES
     # ======================================================
 
-    def handle_completed(
-        done_futures
-    ):
+    def handle_completed(done_futures):
 
         nonlocal total_processed
         nonlocal total_found
@@ -893,9 +889,7 @@ def main():
 
             try:
 
-                found_items = (
-                    future.result()
-                )
+                found_items = future.result()
 
             except Exception as e:
 
@@ -905,54 +899,48 @@ def main():
 
                 found_items = []
 
+
             with lock:
 
                 total_processed += 1
 
-                for (
-                    family,
-                    country,
-                    email
-                ) in found_items:
 
-                    # --------------------------------------
-                    # Global duplicate check
-                    # --------------------------------------
+                for country, combo in found_items:
 
-                    if email in seen:
+                    normalized_combo = combo.lower()
+
+                    if normalized_combo in seen:
                         continue
 
-                    seen.add(email)
 
-                    # --------------------------------------
-                    # Save
-                    # --------------------------------------
+                    seen.add(
+                        normalized_combo
+                    )
 
-                    if save_email(
-                        family,
+
+                    if save_result(
+                        output_folder,
+                        all_temp_file,
+                        country_files,
                         country,
-                        email
+                        combo
                     ):
-
-                        family_counts[
-                            family
-                        ] += 1
-
-                        country_counts[
-                            country
-                        ] += 1
 
                         total_found += 1
 
+                        results_count[country] = (
+                            results_count.get(
+                                country,
+                                0
+                            )
+                            + 1
+                        )
+
                         found(
-                            f"{email} "
-                            f"[{family}] "
+                            f"{combo} "
                             f"[{country}]"
                         )
 
-                # ------------------------------------------
-                # Progress
-                # ------------------------------------------
 
                 if total_processed % 10000 == 0:
 
@@ -966,18 +954,13 @@ def main():
                         f"{total_processed:,} | "
                         f"Found: "
                         f"{total_found:,} | "
-                        f"Hotmail: "
-                        f"{family_counts['Hotmail_Family']:,} | "
-                        f"Yahoo: "
-                        f"{family_counts['Yahoo_Family']:,} | "
-                        f"AOL: "
-                        f"{family_counts['AOL_Family']:,} | "
                         f"Time: "
                         f"{elapsed:.1f}s"
                     )
 
+
     # ======================================================
-    # START STREAMING
+    # STREAM FILE + BOUNDED THREAD QUEUE
     # ======================================================
 
     warning(
@@ -986,11 +969,12 @@ def main():
 
     pending = set()
 
-    try:
 
-        with ThreadPoolExecutor(
-            max_workers=threads
-        ) as executor:
+    with ThreadPoolExecutor(
+        max_workers=threads
+    ) as executor:
+
+        try:
 
             with open(
                 input_file,
@@ -1002,151 +986,106 @@ def main():
 
                 for line in file:
 
-                    future = (
-                        executor.submit(
-                            process_line,
-                            line
-                        )
+                    future = executor.submit(
+                        process_line,
+                        line
                     )
 
                     pending.add(
                         future
                     )
 
-                    # --------------------------------------
-                    # Bounded queue
-                    # --------------------------------------
 
+                    # Keep queue bounded
                     if len(pending) >= batch_size:
 
                         done, pending = wait(
                             pending,
-                            return_when=(
-                                FIRST_COMPLETED
-                            )
+                            return_when=FIRST_COMPLETED
                         )
 
                         handle_completed(
                             done
                         )
 
-                # ------------------------------------------
-                # Remaining tasks
-                # ------------------------------------------
 
+                # Process remaining work
                 while pending:
 
                     done, pending = wait(
                         pending,
-                        return_when=(
-                            FIRST_COMPLETED
-                        )
+                        return_when=FIRST_COMPLETED
                     )
 
                     handle_completed(
                         done
                     )
 
-    except KeyboardInterrupt:
 
-        warning(
-            "Stopped by user. "
-            "Current results were saved."
-        )
+        except KeyboardInterrupt:
 
-    except Exception as e:
-
-        error(
-            f"Fatal processing error: {e}"
-        )
-
-    # ======================================================
-    # FINALIZE FAMILY FILES
-    # ======================================================
-
-    print()
-
-    warning(
-        "Finalizing family files..."
-    )
-
-    final_files = []
-
-    for family in family_names:
-
-        count = family_counts[
-            family
-        ]
-
-        temp_file = temp_files[
-            family
-        ]
-
-        filename = (
-            f"{safe_filename(family)}"
-            f"[{count}].txt"
-        )
-
-        final_file = os.path.join(
-            output_folder,
-            filename
-        )
-
-        try:
-
-            if os.path.exists(
-                final_file
-            ):
-                os.remove(
-                    final_file
-                )
-
-            if os.path.exists(
-                temp_file
-            ):
-
-                os.rename(
-                    temp_file,
-                    final_file
-                )
-
-                final_files.append(
-                    filename
-                )
-
-                saved(
-                    f"{filename} "
-                    f"-> {count:,} emails"
-                )
-
-        except Exception as e:
-
-            error(
-                f"Cannot finalize "
-                f"{filename}: {e}"
+            warning(
+                "Stopped by user. "
+                "Saving current results..."
             )
 
+
     # ======================================================
-    # FINALIZE COUNTRY FILES
+    # RENAME ALL RESULTS FILE
     # ======================================================
 
-    print()
+    all_filename = (
+        f"ALL_RESULTS[{total_found}].txt"
+    )
+
+    all_final_file = os.path.join(
+        output_folder,
+        all_filename
+    )
+
+
+    if os.path.exists(
+        all_final_file
+    ):
+
+        os.remove(
+            all_final_file
+        )
+
+
+    if os.path.exists(
+        all_temp_file
+    ):
+
+        os.rename(
+            all_temp_file,
+            all_final_file
+        )
+
+
+    # ======================================================
+    # RENAME COUNTRY TEMP FILES
+    # ======================================================
+
+    split_files = []
 
     warning(
         "Finalizing country files..."
     )
 
+
     for country in sorted(
-        country_counts.keys()
+        country_files.keys()
     ):
 
-        count = country_counts[
+        temp_file = country_files[
             country
         ]
 
-        temp_file = temp_files[
-            country
-        ]
+        count = results_count.get(
+            country,
+            0
+        )
 
         filename = (
             f"{safe_filename(country)}"
@@ -1158,53 +1097,48 @@ def main():
             filename
         )
 
-        try:
 
-            if os.path.exists(
+        if os.path.exists(
+            final_file
+        ):
+
+            os.remove(
                 final_file
-            ):
-                os.remove(
-                    final_file
-                )
-
-            if os.path.exists(
-                temp_file
-            ):
-
-                os.rename(
-                    temp_file,
-                    final_file
-                )
-
-                final_files.append(
-                    filename
-                )
-
-                saved(
-                    f"{filename} "
-                    f"-> {count:,} emails"
-                )
-
-        except Exception as e:
-
-            error(
-                f"Cannot finalize "
-                f"{filename}: {e}"
             )
+
+
+        if os.path.exists(
+            temp_file
+        ):
+
+            os.rename(
+                temp_file,
+                final_file
+            )
+
+            split_files.append(
+                filename
+            )
+
+            saved(
+                filename
+            )
+
 
     # ======================================================
     # RESULT NOTICE
     # ======================================================
+
+    notice_file = os.path.join(
+        output_folder,
+        "RESULT_NOTICE.txt"
+    )
 
     elapsed = (
         time.time()
         - start_time
     )
 
-    notice_file = os.path.join(
-        output_folder,
-        "RESULT_NOTICE.txt"
-    )
 
     try:
 
@@ -1215,19 +1149,20 @@ def main():
         ) as notice:
 
             notice.write(
-                "=" * 70
+                "=" * 65
                 + "\n"
             )
 
             notice.write(
-                "EMAIL FAMILY + COUNTRY "
-                "FILTER RESULT\n"
+                "LARGE FILE COUNTRY EXTRACTION "
+                "RESULT NOTICE\n"
             )
 
             notice.write(
-                "=" * 70
+                "=" * 65
                 + "\n\n"
             )
+
 
             notice.write(
                 f"INPUT FILE:\n"
@@ -1240,130 +1175,109 @@ def main():
             )
 
             notice.write(
-                f"FILE SIZE:\n"
-                f"{file_size_gb:.2f} GB\n\n"
+                f"INPUT FILE SIZE: "
+                f"{file_size_gb:.2f} GB\n"
             )
 
             notice.write(
-                f"THREADS:\n"
-                f"{threads}\n\n"
+                f"THREADS USED: "
+                f"{threads}\n"
             )
 
             notice.write(
-                f"BATCH SIZE:\n"
-                f"{batch_size}\n\n"
+                f"BATCH SIZE: "
+                f"{batch_size}\n"
             )
 
             notice.write(
-                f"LINES PROCESSED:\n"
-                f"{total_processed:,}\n\n"
+                f"LINES PROCESSED: "
+                f"{total_processed:,}\n"
             )
 
             notice.write(
-                f"UNIQUE EXPORTED EMAILS:\n"
-                f"{total_found:,}\n\n"
+                f"UNIQUE RESULTS: "
+                f"{total_found:,}\n"
             )
 
             notice.write(
-                "=" * 70
+                f"TIME: "
+                f"{elapsed:.2f} seconds\n\n"
+            )
+
+
+            notice.write(
+                "=" * 65
                 + "\n"
             )
 
             notice.write(
-                "FAMILY RESULTS\n"
+                f"ALL RESULTS: "
+                f"{all_filename}\n"
             )
 
             notice.write(
-                "=" * 70
-                + "\n"
+                "=" * 65
+                + "\n\n"
             )
 
-            for family in family_names:
-
-                count = family_counts[
-                    family
-                ]
-
-                filename = (
-                    f"{family}"
-                    f"[{count}].txt"
-                )
-
-                notice.write(
-                    f"{filename} "
-                    f"= {count:,}\n"
-                )
 
             notice.write(
-                "\n"
+                "COUNTRY FILES\n\n"
             )
 
-            notice.write(
-                "=" * 70
-                + "\n"
-            )
-
-            notice.write(
-                "COUNTRY RESULTS\n"
-            )
-
-            notice.write(
-                "=" * 70
-                + "\n"
-            )
 
             for country in sorted(
-                country_counts.keys()
+                results_count.keys()
             ):
 
-                count = country_counts[
+                count = results_count[
                     country
                 ]
 
                 filename = (
-                    f"{country}"
+                    f"{safe_filename(country)}"
                     f"[{count}].txt"
                 )
 
                 notice.write(
                     f"{filename} "
-                    f"= {count:,}\n"
+                    f"= {count:,} results\n"
                 )
 
-            notice.write(
-                "\n"
-            )
 
             notice.write(
-                f"TIME:\n"
-                f"{elapsed:.2f} seconds\n"
+                f"\nTOTAL COUNTRY FILES: "
+                f"{len(split_files)}\n"
             )
+
 
         saved(
-            f"RESULT_NOTICE.txt"
+            f"RESULT NOTICE -> "
+            f"{notice_file}"
         )
+
 
     except Exception as e:
 
         error(
-            f"Cannot save result notice: "
-            f"{e}"
+            f"Cannot save notice: {e}"
         )
 
+
     # ======================================================
-    # FINAL SUMMARY
+    # DONE
     # ======================================================
 
     print()
 
     print(
         f"{LIGHT_CYAN}"
-        f"{'=' * 70}"
+        f"{'=' * 65}"
         f"{RESET}"
     )
 
     success(
-        "DONE"
+        "DONE EXTRACTING"
     )
 
     info(
@@ -1372,37 +1286,13 @@ def main():
     )
 
     info(
-        f"Unique Found    : "
+        f"Unique Results  : "
         f"{total_found:,}"
     )
 
-    print()
-
-    info(
-        f"Hotmail Family  : "
-        f"{family_counts['Hotmail_Family']:,}"
-    )
-
-    info(
-        f"Yahoo Family    : "
-        f"{family_counts['Yahoo_Family']:,}"
-    )
-
-    info(
-        f"AOL Family      : "
-        f"{family_counts['AOL_Family']:,}"
-    )
-
-    print()
-
     info(
         f"Country Files   : "
-        f"{len(country_counts):,}"
-    )
-
-    info(
-        f"Excluded        : "
-        f"{len(EXCLUDED_PROVIDERS)} providers"
+        f"{len(split_files):,}"
     )
 
     info(
@@ -1410,14 +1300,14 @@ def main():
         f"{elapsed:.2f} seconds"
     )
 
-    info(
-        f"Output Folder   : "
-        f"{output_folder}"
+    saved(
+        f"All Results -> "
+        f"{all_final_file}"
     )
 
     print(
         f"{LIGHT_CYAN}"
-        f"{'=' * 70}"
+        f"{'=' * 65}"
         f"{RESET}"
     )
 
@@ -1427,10 +1317,6 @@ def main():
         f"{RESET}"
     )
 
-
-# ==========================================================
-# ENTRY POINT
-# ==========================================================
 
 if __name__ == "__main__":
     main()
